@@ -1,0 +1,4 @@
+# All temporary Microroft Word files 
+*.tmp
+~*.doc
+~*.docx
