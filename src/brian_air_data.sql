@@ -192,10 +192,11 @@ INSERT INTO creditcard_type(type) VALUES
 
 
 CALL create_flights(CURRENT_DATE(),366);
-CALL reserve_seats(3, 'BA1411250');
+CALL reserve_seats(50, 'BA1411250');
 CALL add_existing_passenger(1, '810217-8485');
 CALL add_existing_passenger(1, '600510-6493');
 CALL add_existing_passenger(1, '400316-1354');
+CALL add_contact_to_booking(1, '600510-6493');
 CALL add_creditcard('01827D', 3, 2, 15, '600510-6493');
 CALL pay_booking(1, '01827D');
 

@@ -8,6 +8,7 @@ DROP PROCEDURE IF EXISTS pay_booking;
 DROP PROCEDURE IF EXISTS get_flight_price;
 DROP PROCEDURE IF EXISTS get_seats_taken;
 DROP PROCEDURE IF EXISTS flights_to;
+DROP PROCEDURE IF EXISTS add_contact_to_booking;
 
 
 DELIMITER //
@@ -18,17 +19,16 @@ DELIMITER //
 CREATE PROCEDURE create_flights (IN start DATE, IN days INT)
 BEGIN
 	DECLARE nr INT;
-	DECLARE start_date DATE;
+	DECLARE cur_date DATE;
 
-	-- TODO: Call start date for something else.
-	SET start_date = start;
+	SET cur_date = start;
 	SET nr = 0;
 
 	WHILE days > nr DO
 
-		CALL create_single_flight(start_date);
+		CALL create_single_flight(cur_date);
 		SET nr 			= nr + 1;
-	 	SET start_date 	= DATE_ADD(start_date, INTERVAL 1 DAY);
+	 	SET cur_date 	= DATE_ADD(cur_date, INTERVAL 1 DAY);
 
 	END WHILE;
 
@@ -37,30 +37,31 @@ END;
 
 -- Used by "create_flights" to create a SINGLE flight. Only used internally.
 CREATE PROCEDURE create_single_flight (IN cur_date DATE)
-BEGIN
+create_flight: BEGIN
+
 	-- Initial declarations.
 	DECLARE flight_id INT;
 	DECLARE identifier VARCHAR(64);
 	DECLARE done INT DEFAULT FALSE;
 	DECLARE counter INT DEFAULT 0;
-	
-	-- TODO: Check if flights are already added on this date. 
-	---      If so, display error message. (Ohterwise, identifier collision)
+	DECLARE flight_exist INT;
 
-	-- Curspr fr looping over all flights matching the 
+	-- Cursor for looping over all flights matching the 
 	-- date conditions.
 	DECLARE cur CURSOR FOR 
 		SELECT id 
 		FROM weekly_flight 
-		WHERE flies_on 
-		IN (
-			SELECT DAYOFWEEK(cur_date)
-		) 
-		AND year 
-		IN (
-			SELECT YEAR(cur_date)
-		);
+		WHERE flies_on = DAYOFWEEK(cur_date) 
+		AND year = YEAR(cur_date);
+
 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+	SET flight_exist = (SELECT COUNT(*) FROM regular_flight WHERE regular_flight.date=cur_date LIMIT 1);
+
+	IF flight_exist > 0 THEN
+		SELECT "Flights has already been generated for this date" AS "Error Message";
+		LEAVE create_flight;
+	END IF;
 
 	OPEN cur;
 		
@@ -118,7 +119,7 @@ reserve_label : BEGIN
 
 	SELECT message AS "Confirm Message";
 
-END //
+END;
 
 -- Adds a passenger to the database. It both adds it in the customer table and in a specific booking. Used for "first-time-fliers".
 CREATE PROCEDURE add_passenger(	IN booking_number INT,
@@ -140,21 +141,20 @@ END;
 CREATE PROCEDURE add_existing_passenger(IN booking_number INT, IN pid VARCHAR(64))
 add_existing_label: BEGIN
 	
-	-- TODO: Check if booking already contains enough customers, eg count named customers with this id.
-	/* TEST
-	DECLARE seats_left_in_booking;
+	DECLARE seats_left_in_booking INT;
+	
 	SET seats_left_in_booking = (
 		SELECT COUNT(*)
 		FROM passenger_on
 		WHERE 	booking = booking_number
-		AND 	passanger IS NOT NULL
+		AND 	customer IS NULL
 	);
+
 	IF seats_left_in_booking = 0 THEN
 		SELECT "The booking is full, try adding a new booking if the current number of passengers is not sufficient"
 		AS "Error message";
 		LEAVE add_existing_label;
 	END IF;
-	*/
 
 	-- Adds passenger credentials to the first empty space
 	-- For a customer on the boooking
@@ -164,19 +164,65 @@ add_existing_label: BEGIN
 	AND customer IS NULL 
 	LIMIT 1;
 
-	-- TODO: Check if booking does not already have a contact customer.
-	-- 		 Move condition to own variable,
-	IF (SELECT count(*) FROM contact_customer where contact_customer.personal_id=pid) = 1 THEN
-		UPDATE booking SET contact=pid WHERE booking.booking_number=booking_number;
-
-	END IF;
 END;
 
-/*
-	TODO:
-	Add contact customer procedure.
-	Convience method for this purrhupas.
-*/
+-- PROCEDURE TO MARK A CUSTOMER AS CONTACT?
+
+CREATE PROCEDURE add_contact_to_booking(IN booking_number INT, IN customer VARCHAR(64))
+contact: BEGIN
+	DECLARE exist INT;
+	DECLARE is_contact INT;
+	DECLARE in_booking INT;
+
+	SET exist = (
+		SELECT COUNT(*) 
+		FROM customer 
+		WHERE customer.personal_id=customer
+		LIMIT 1
+	);
+
+	-- Checks if the customer exists.
+	-- If not, an error message is displayed and procedure ends.
+	IF exist = 0 THEN
+		SELECT "Customer doesn't exist. Please add customer before." AS "Error Message";
+		LEAVE contact;
+	END IF;
+
+	SET is_contact = (
+		SELECT COUNT(*) 
+		FROM contact_customer
+		WHERE contact_customer.personal_id=customer
+		LIMIT 1
+	);
+
+	IF is_contact = 0 THEN
+		SELECT "Customer is not a contact customer. Please add as contact customer before." AS "Error Message";
+		LEAVE contact;
+	END IF;
+
+	SET in_booking = (
+		SELECT COUNT(*)
+		FROM passenger_on
+		WHERE passenger_on.customer = customer
+		AND passenger_on.booking = booking_number
+		LIMIT 1
+	); 
+
+	IF in_booking = 0 THEN
+		SELECT "The customer is not a part of this booking." AS "Error Message";
+		LEAVE contact;
+	END IF;
+
+	UPDATE booking
+	SET booking.contact = customer
+	WHERE booking.booking_number = booking_number;
+
+	SELECT CONCAT("Successfully added ", customer, " as a contact customer to ", booking_number, ".") 
+	AS "Confirmation Message";
+
+END;
+
+
 
 -- Adds a credit card to the database so it can be used to pay for a booking.
 CREATE PROCEDURE add_creditcard (	IN card_number VARCHAR(64),
@@ -225,12 +271,18 @@ booking: BEGIN
 	DECLARE base_price INT;
 	DECLARE weekday_factor INT;
 	DECLARE passenger_factor INT;
+	DECLARE contact VARCHAR(64);
 	DECLARE message VARCHAR(64);
 
 	SET flight_num 	  	 		= (SELECT flight FROM booking WHERE booking.booking_number=booking_number LIMIT 1);
-	SET passenger_in_booking	= (SELECT COUNT(*) FROM passenger_on WHERE booking=booking_number AND customer IS NOT NULL);
+	SET passenger_in_booking	= (SELECT COUNT(*) FROM passenger_on WHERE booking=booking_number);
 
-	-- TODO: Check if booking has contact customer. If not, abort.
+	SET contact = (SELECT booking.contact FROM booking WHERE booking.booking_number=booking_number LIMIT 1);
+
+	IF contact IS NULL THEN
+		SELECT "Booking has no contact customer, please add one." AS "Error Message";
+		LEAVE booking;
+	END IF;
 
 	CALL get_seats_taken(flight_num,passenger_on_flight);
 
@@ -245,20 +297,19 @@ booking: BEGIN
 
 	CALL get_flight_price(flight_num,tot_price);
 
+	SET tot_price = tot_price*passenger_in_booking;
+
 	INSERT INTO payment(amount,paid_with,paid_for) VALUES
-		(tot_price*passenger_in_booking,creditcard_number,booking_number);
+		(tot_price,creditcard_number,booking_number);
 
 	UPDATE booking 
-	SET booking.ticket_number=MD60(NOW()) 
+	SET booking.ticket_number=MD5(NOW()) 
 	WHERE booking.booking_number=booking_number;
 
 	-- Since the booking as a whole has been payed for, the status 
 	UPDATE passenger_on 
 	SET payed=1 
 	WHERE booking=booking_number;
-
-
-	-- TODO: Skip message variable
 
 	SET message = CONCAT("Payment for booking number ", booking_number, " successful!");
 
@@ -282,9 +333,8 @@ BEGIN
 
 	CALL get_seats_taken(flight_num,passenger_on_flight);
 	
-/* TEST (instead of statements below)!
 	SELECT 	w.year, 	w.route, 	w.flies_on  
-	INTO 	year,		route		day
+	INTO 	year,		route,		day
 	FROM (
 		regular_flight AS r 
 		INNER JOIN weekly_flight AS w 
@@ -292,10 +342,6 @@ BEGIN
 	) 
 	WHERE flight_number = flight_num 
 	LIMIT 1;
-*/
-	SET year 	= (SELECT w.year FROM (regular_flight AS r INNER JOIN weekly_flight AS w ON r.from_weekly = w.id) WHERE flight_number = flight_num);
-	SET route 	= (SELECT w.route FROM (regular_flight AS r INNER JOIN weekly_flight AS w ON r.from_weekly = w.id) WHERE flight_number = flight_num);
-	SET day 	= (SELECT w.flies_on FROM (regular_flight AS r INNER JOIN weekly_flight AS w ON r.from_weekly = w.id) WHERE flight_number = flight_num LIMIT 1);
 	
 	SET passenger_factor 	= (SELECT factor FROM passenger_factor WHERE passenger_factor.year = year);
 	SET weekday_factor 		= (SELECT factor FROM weekday_factor WHERE weekday = day AND weekday_factor.year = year);
@@ -380,17 +426,15 @@ BEGIN
 			LEAVE read_loop;
 		END IF;
 
-		-- TODO: Use get seats taken instead?
-		SET seats_taken = (SELECT COUNT(*) FROM passenger_on WHERE booking IN (SELECT booking_number FROM booking WHERE flight = flight_id) AND customer IS NOT NULL);
+		CALL get_seats_taken(flight_id,seats_taken);
+
 		SET seats_free = 60-seats_taken;
 
-		CALL get_flight_price(flight_id,flight_price);
-
-
-		-- TODO: Check if all seats are taken, then do not display.
-
-		INSERT INTO temp_table 
-		VALUES (flight_id,flight_departure,seats_free,flight_price);
+		IF seats_free > 0 THEN
+			CALL get_flight_price(flight_id,flight_price);
+			INSERT INTO temp_table 
+			VALUES (flight_id,flight_departure,seats_free,flight_price);
+		END IF;
 
 	END LOOP;
 

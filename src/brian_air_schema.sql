@@ -155,5 +155,5 @@ CREATE TABLE passenger_on (
 	FOREIGN KEY (booking)  REFERENCES booking(booking_number)
 ) ENGINE=InnoDB;
 
-source LiU/brian_air_procedures.sql;
-source LiU/brian_air_data.sql;
+source brian_air_procedures.sql;
+source brian_air_data.sql;
