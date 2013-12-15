@@ -1,0 +1,35 @@
+mysql> set autocommit=0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> call trans_reserve(6,'BA1411250');
++----------------------------+
+| Confirm Message            |
++----------------------------+
+| 6 seats have been reserved |
++----------------------------+
+1 row in set (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> call trans_add_customer(2,'570826-6385');
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> call trans_add_contact(2,'570826-6385');
++------------------------------------------------------------+
+| Confirmation Message                                       |
++------------------------------------------------------------+
+| Successfully added 570826-6385 as a contact customer to 2. |
++------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> call trans_pay(2,'01827D');
++------------------------------------------+
+| Confirmation Message                     |
++------------------------------------------+
+| Payment for booking number 2 successful! |
++------------------------------------------+
+1 row in set (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
