@@ -140,15 +140,43 @@ END;
 CREATE PROCEDURE add_existing_passenger(IN booking_number INT, IN pid VARCHAR(64))
 add_existing_label: BEGIN
 	
-	-- TODO: Check if booking already contains enough.
+	-- TODO: Check if booking already contains enough customers, eg count named customers with this id.
+	/* TEST
+	DECLARE seats_left_in_booking;
+	SET seats_left_in_booking = (
+		SELECT COUNT(*)
+		FROM passenger_on
+		WHERE 	booking = booking_number
+		AND 	passanger IS NOT NULL
+	);
+	IF seats_left_in_booking = 0 THEN
+		SELECT "The booking is full, try adding a new booking if the current number of passengers is not sufficient"
+		AS "Error message";
+		LEAVE add_existing_label;
+	END IF;
+	*/
 
-	UPDATE passenger_on SET customer=pid WHERE booking=booking_number AND customer IS NULL LIMIT 1;
+	-- Adds passenger credentials to the first empty space
+	-- For a customer on the boooking
+	UPDATE passenger_on 
+	SET customer=pid 
+	WHERE booking=booking_number 
+	AND customer IS NULL 
+	LIMIT 1;
 
-	IF (select count(*) FROM contact_customer where contact_customer.personal_id=pid) = 1 THEN
+	-- TODO: Check if booking does not already have a contact customer.
+	-- 		 Move condition to own variable,
+	IF (SELECT count(*) FROM contact_customer where contact_customer.personal_id=pid) = 1 THEN
 		UPDATE booking SET contact=pid WHERE booking.booking_number=booking_number;
 
 	END IF;
 END;
+
+/*
+	TODO:
+	Add contact customer procedure.
+	Convience method for this purrhupas.
+*/
 
 -- Adds a credit card to the database so it can be used to pay for a booking.
 CREATE PROCEDURE add_creditcard (	IN card_number VARCHAR(64),
@@ -201,6 +229,8 @@ booking: BEGIN
 
 	SET flight_num 	  	 		= (SELECT flight FROM booking WHERE booking.booking_number=booking_number LIMIT 1);
 	SET passenger_in_booking	= (SELECT COUNT(*) FROM passenger_on WHERE booking=booking_number AND customer IS NOT NULL);
+
+	-- TODO: Check if booking has contact customer. If not, abort.
 
 	CALL get_seats_taken(flight_num,passenger_on_flight);
 
