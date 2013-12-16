@@ -183,14 +183,27 @@ END;
 CREATE PROCEDURE add_existing_passenger(IN booking_number INT, IN pid VARCHAR(64))
 add_existing_label: BEGIN
 	
-	-- TODO: Age check.
+	-- Initial declarations
+	DECLARE seats_left_in_booking INT;
+	DECLARE age INT;
+
+	-- Age check.
+	SET age = (
+		SELECT 	customer.age 
+		FROM 	customer
+		WHERE 	personal_id=pid
+	);
+
+	IF age < 18 THEN
+		SELECT CONCAT("The customer is too young to travel. Please wait ", 18-age, " year(s) before travelling with Brian Air.")
+		AS "Error message";
+		LEAVE add_existing_label;
+	END IF;
 
 	-- This checks if enough persons already have been added to the booking.
 	-- For example, if a reservation was made for 3 people, and 3 people was 
 	-- added with this procedure, when a 4th person tries to add one self this
 	-- will yeild an error message. 
-	DECLARE seats_left_in_booking INT;
-	
 	SET seats_left_in_booking = (
 		SELECT 	COUNT(*)
 		FROM 	passenger_on
