@@ -162,7 +162,6 @@ INSERT INTO customer VALUES
 	('090301-6483', 1,	'Justin',	'Bieber',		4),
 	('570826-6385',	4,	'Dr',		'Alban',		56),
 	('170312-2467',	1,	'Leif',		'G.W Persson',	204),
-	('970621-8967',	1,	'Rebecca',	'Black',		16),
 	('820927-2461',	5,	'Lil',		'Wayne',		31);
 
 /*
@@ -197,7 +196,6 @@ CALL reserve_seats(50, 'BA1411250');
 CALL add_existing_passenger(1, '810217-8485');
 CALL add_existing_passenger(1, '600510-6493');
 CALL add_existing_passenger(1, '400316-1354');
-CALL add_existing_passenger(1, '970621-8967');
 CALL add_contact_to_booking(1, '600510-6493');
 CALL add_creditcard('01827D', 3, 2, 15, '600510-6493');
 CALL pay_booking(1, '01827D');
